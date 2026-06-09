@@ -15,6 +15,7 @@ class AuthController {
         lastName: lastName || "",
         phone,
       });
+      console.log(result);
 
       req.session.userId = result.user.id;
 

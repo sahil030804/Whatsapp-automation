@@ -2,12 +2,7 @@ const userDb = require("../../dbUtils/user");
 const { logger } = require("../../lib/logger");
 
 class AuthService {
-  constructor() {
-    // No need for database connection management - handled by utilities
-  }
-
   async signup(userData) {
-    // Check if user already exists
     const existingUser = await userDb.checkEmailExists(userData.email);
 
     if (!existingUser.success) {
@@ -18,7 +13,6 @@ class AuthService {
       throw new Error("EMAIL_ALREADY_EXISTS");
     }
 
-    // Create new user using utility function
     const result = await userDb.createUser(userData);
     return result;
   }
@@ -27,10 +21,9 @@ class AuthService {
     const { email, password } = loginData;
 
     try {
-      // Find user by email
       const userResult = await userDb.findOne(
-        { email: email.toLowerCase(), deleted_at: null },
-        "id, email, password_hash, full_name, first_name, last_name, phone, is_active, role, login_count, last_login_at",
+        { email: email.toLowerCase() },
+        "id, email, password_hash, fname, lname, phone_number, role, status, plan, onboarding_completed",
       );
 
       if (!userResult.success || !userResult.data) {
@@ -39,12 +32,10 @@ class AuthService {
 
       const user = userResult.data;
 
-      // Check if user is active
-      if (!user.is_active) {
+      if (user.status !== "ACTIVE") {
         throw new Error("ACCOUNT_DISABLED");
       }
 
-      // Verify password
       const isPasswordValid = await userDb.verifyPassword(
         password,
         user.password_hash,
@@ -54,17 +45,10 @@ class AuthService {
         throw new Error("INVALID_EMAIL_OR_PASSWORD");
       }
 
-      // Update login count and last login
-      await userDb.updateUserLogin(user.id);
-
       return {
         success: true,
         message: "Login successful",
-        user: userDb.formatUserData({
-          ...user,
-          login_count: user.login_count + 1,
-          last_login_at: new Date(),
-        }),
+        user: userDb.formatUserData(user),
       };
     } catch (error) {
       logger.error("Login error:", error);

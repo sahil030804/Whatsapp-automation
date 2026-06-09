@@ -1,27 +1,27 @@
-const { getDatabase } = require("../lib/database");
+const { sequelize } = require("../models");
 const { logger } = require("../lib/logger");
 
 /**
- * Generic database utility functions for reusable database operations
+ * Generic database utility functions for reusable database operations using Sequelize
  */
 class BaseDb {
   /**
-   * Execute a simple query with parameters
+   * Execute a raw SQL query with parameters (for complex queries that can't be expressed with Sequelize)
    * @param {string} query - SQL query string
    * @param {Array} params - Query parameters
    * @returns {Promise<Object>} Query result
    */
   async executeQuery(query, params = []) {
-    const pool = getDatabase();
-    let client;
-
     try {
-      client = await pool.connect();
-      const result = await client.query(query, params);
+      const [results, metadata] = await sequelize.query(query, {
+        replacements: params,
+        type: sequelize.QueryTypes.SELECT,
+      });
+
       return {
         success: true,
-        data: result.rows,
-        rowCount: result.rowCount,
+        data: results,
+        rowCount: results.length,
       };
     } catch (error) {
       logger.error("Database query error:", {
@@ -31,264 +31,285 @@ class BaseDb {
         params,
       });
       return this.formatError(error);
-    } finally {
-      if (client) {
-        client.release();
-      }
     }
   }
 
   /**
-   * Execute multiple queries in a transaction
-   * @param {Array} queries - Array of {query, params} objects
+   * Execute multiple operations in a transaction
+   * @param {Function} callback - Function that receives transaction object
    * @returns {Promise<Object>} Transaction result
    */
-  async executeTransaction(queries) {
-    const pool = getDatabase();
-    let client;
+  async executeTransaction(callback) {
+    const transaction = await sequelize.transaction();
 
     try {
-      client = await pool.connect();
-      await client.query("BEGIN");
+      const result = await callback(transaction);
+      await transaction.commit();
 
-      const results = [];
-      for (const { query, params = [] } of queries) {
-        const result = await client.query(query, params);
-        results.push({
-          success: true,
-          data: result.rows,
-          rowCount: result.rowCount,
-        });
-      }
-
-      await client.query("COMMIT");
       return {
         success: true,
-        data: results,
+        data: result,
       };
     } catch (error) {
-      if (client) {
-        try {
-          await client.query("ROLLBACK");
-        } catch (rollbackError) {
-          logger.error("Transaction rollback error:", rollbackError);
-        }
-      }
+      await transaction.rollback();
 
       logger.error("Transaction error:", {
         error: error.message,
         stack: error.stack,
-        queries,
       });
+
       return this.formatError(error);
-    } finally {
-      if (client) {
-        client.release();
-      }
     }
   }
 
   /**
-   * Find a single record
-   * @param {string} table - Table name
+   * Execute multiple queries in a transaction (legacy compatibility)
+   * @param {Array} queries - Array of {query, params} objects
+   * @returns {Promise<Object>} Transaction result
+   */
+  async executeTransactionQueries(queries) {
+    return this.executeTransaction(async (transaction) => {
+      const results = [];
+
+      for (const { query, params = [] } of queries) {
+        const [result] = await sequelize.query(query, {
+          replacements: params,
+          transaction,
+          type: sequelize.QueryTypes.SELECT,
+        });
+        results.push(result);
+      }
+
+      return results;
+    });
+  }
+
+  /**
+   * Find a single record using Sequelize model
+   * @param {string} modelName - Sequelize model name
    * @param {Object} conditions - WHERE conditions
    * @param {Object} options - Additional options (orderBy, columns, etc.)
    * @returns {Promise<Object>} Query result
    */
-  async findOne(table, conditions = {}, options = {}) {
-    const {
-      columns = "*",
-      where = this.buildWhereClause(conditions),
-      orderBy = "",
-    } = options;
-    const query = `SELECT ${columns} FROM ${table} ${where} ${orderBy} LIMIT 1`;
-    const params = this.buildParams(conditions);
+  async findOne(modelName, conditions = {}, options = {}) {
+    try {
+      const { sequelize } = require("../models");
+      const model = sequelize.models[modelName];
 
-    const result = await this.executeQuery(query, params);
+      if (!model) {
+        throw new Error(`Model ${modelName} not found`);
+      }
 
-    if (result.success && result.data.length > 0) {
-      result.data = result.data[0];
-    } else if (result.success) {
-      result.data = null;
+      const { attributes = "*", order = [], include = [] } = options;
+
+      const whereConditions = { ...conditions };
+      if (whereConditions.deleted_at === null) {
+        delete whereConditions.deleted_at;
+      }
+
+      const result = await model.findOne({
+        where: whereConditions,
+        attributes: attributes === "*" ? undefined : attributes,
+        order,
+        include,
+        paranoid: model.options.paranoid || false,
+      });
+
+      return {
+        success: true,
+        data: result ? result.get({ plain: true }) : null,
+      };
+    } catch (error) {
+      logger.error("Find one error:", {
+        error: error.message,
+        stack: error.stack,
+        modelName,
+        conditions,
+      });
+      return this.formatError(error);
     }
-
-    return result;
   }
 
   /**
-   * Find multiple records
-   * @param {string} table - Table name
+   * Find multiple records using Sequelize model
+   * @param {string} modelName - Sequelize model name
    * @param {Object} conditions - WHERE conditions
    * @param {Object} options - Additional options (orderBy, limit, offset, columns)
    * @returns {Promise<Object>} Query result
    */
-  async findMany(table, conditions = {}, options = {}) {
-    const {
-      columns = "*",
-      where = this.buildWhereClause(conditions),
-      orderBy = "",
-      limit = "",
-      offset = "",
-    } = options;
+  async findMany(modelName, conditions = {}, options = {}) {
+    try {
+      const { sequelize } = require("../models");
+      const model = sequelize.models[modelName];
 
-    const query = `SELECT ${columns} FROM ${table} ${where} ${orderBy} ${limit} ${offset}`;
-    const params = this.buildParams(conditions);
+      if (!model) {
+        throw new Error(`Model ${modelName} not found`);
+      }
 
-    return this.executeQuery(query, params);
+      const {
+        attributes = "*",
+        order = [],
+        limit,
+        offset,
+        include = [],
+      } = options;
+
+      const whereConditions = { ...conditions };
+      if (whereConditions.deleted_at === null) {
+        delete whereConditions.deleted_at;
+      }
+
+      const queryOptions = {
+        where: whereConditions,
+        attributes: attributes === "*" ? undefined : attributes,
+        order,
+        include,
+        paranoid: model.options.paranoid || false,
+      };
+
+      if (limit) queryOptions.limit = limit;
+      if (offset) queryOptions.offset = offset;
+
+      const results = await model.findAll(queryOptions);
+
+      return {
+        success: true,
+        data: results.map((result) => result.get({ plain: true })),
+        rowCount: results.length,
+      };
+    } catch (error) {
+      logger.error("Find many error:", {
+        error: error.message,
+        stack: error.stack,
+        modelName,
+        conditions,
+      });
+      return this.formatError(error);
+    }
   }
 
   /**
-   * Insert a new record
-   * @param {string} table - Table name
+   * Insert a new record using Sequelize model
+   * @param {string} modelName - Sequelize model name
    * @param {Object} data - Data to insert
    * @param {Object} options - Additional options (returning)
    * @returns {Promise<Object>} Query result
    */
-  async insert(table, data, options = {}) {
-    const { returning = "*" } = options;
-    const columns = Object.keys(data).join(", ");
-    const placeholders = this.buildPlaceholders(Object.keys(data));
-    const values = Object.values(data);
+  async insert(modelName, data, options = {}) {
+    try {
+      const { sequelize } = require("../models");
+      const model = sequelize.models[modelName];
 
-    const query = `INSERT INTO ${table} (${columns}) VALUES (${placeholders}) RETURNING ${returning}`;
+      if (!model) {
+        throw new Error(`Model ${modelName} not found`);
+      }
 
-    const result = await this.executeQuery(query, values);
-    if (result.success && result.data.length > 0) {
-      result.data = result.data[0];
-    } else if (result.success) {
-      result.data = null;
+      const result = await model.create(data, {
+        returning: options.returning === "*" ? true : options.returning,
+      });
+
+      return {
+        success: true,
+        data: result.get({ plain: true }),
+      };
+    } catch (error) {
+      logger.error("Insert error:", {
+        error: error.message,
+        stack: error.stack,
+        modelName,
+        data,
+      });
+      return this.formatError(error);
     }
-
-    return result;
   }
 
   /**
-   * Update existing records
-   * @param {string} table - Table name
+   * Update existing records using Sequelize model
+   * @param {string} modelName - Sequelize model name
    * @param {Object} data - Data to update
    * @param {Object} conditions - WHERE conditions
    * @param {Object} options - Additional options (returning)
    * @returns {Promise<Object>} Query result
    */
-  async update(table, data, conditions = {}, options = {}) {
-    const { returning = "*" } = options;
-    const setClause = this.buildSetClause(data);
-    const whereClause = this.buildWhereClause(conditions);
+  async update(modelName, data, conditions = {}, options = {}) {
+    try {
+      const { sequelize } = require("../models");
+      const model = sequelize.models[modelName];
 
-    // Filter out expression values from params
-    const dataValues = Object.values(data).filter(
-      (value) =>
-        !(
-          typeof value === "string" &&
-          (value.includes("+") || value === "CURRENT_TIMESTAMP")
-        ),
-    );
-    const params = [...dataValues, ...this.buildParams(conditions)];
+      if (!model) {
+        throw new Error(`Model ${modelName} not found`);
+      }
 
-    const query = `UPDATE ${table} SET ${setClause} ${whereClause} RETURNING ${returning}`;
+      const whereConditions = { ...conditions };
+      if (whereConditions.deleted_at === null) {
+        delete whereConditions.deleted_at;
+      }
 
-    const result = await this.executeQuery(query, params);
-    if (result.success && result.data.length > 0) {
-      result.data = result.data[0];
-    } else if (result.success) {
-      result.data = null;
+      const updateData = { ...data };
+
+      const [affectedCount, affectedRows] = await model.update(updateData, {
+        where: whereConditions,
+        returning: options.returning === "*" ? true : options.returning,
+        paranoid: model.options.paranoid || false,
+      });
+
+      return {
+        success: true,
+        data:
+          affectedRows.length > 0 ? affectedRows[0].get({ plain: true }) : null,
+        affectedCount,
+      };
+    } catch (error) {
+      logger.error("Update error:", {
+        error: error.message,
+        stack: error.stack,
+        modelName,
+        data,
+        conditions,
+      });
+      return this.formatError(error);
     }
-
-    return result;
   }
 
   /**
-   * Soft delete records (sets deleted_at timestamp)
-   * @param {string} table - Table name
+   * Soft delete records using Sequelize model
+   * @param {string} modelName - Sequelize model name
    * @param {Object} conditions - WHERE conditions
    * @returns {Promise<Object>} Query result
    */
-  async delete(table, conditions = {}) {
-    return this.update(table, { deleted_at: "CURRENT_TIMESTAMP" }, conditions);
-  }
-
-  /**
-   * Helper function for connection management
-   * @param {Function} callback - Function to execute with client
-   * @returns {Promise<any>} Callback result
-   */
-  async withConnection(callback) {
-    const pool = getDatabase();
-    let client;
-
+  async delete(modelName, conditions = {}) {
     try {
-      client = await pool.connect();
-      return await callback(client);
+      const { sequelize } = require("../models");
+      const model = sequelize.models[modelName];
+
+      if (!model) {
+        throw new Error(`Model ${modelName} not found`);
+      }
+
+      const whereConditions = { ...conditions };
+      if (whereConditions.deleted_at === null) {
+        delete whereConditions.deleted_at;
+      }
+
+      const affectedCount = await model.destroy({
+        where: whereConditions,
+        paranoid: model.options.paranoid || false,
+      });
+
+      return {
+        success: true,
+        data: null,
+        affectedCount,
+      };
     } catch (error) {
-      logger.error("Connection error:", {
+      logger.error("Delete error:", {
         error: error.message,
         stack: error.stack,
+        modelName,
+        conditions,
       });
-      throw error;
-    } finally {
-      if (client) {
-        client.release();
-      }
+      return this.formatError(error);
     }
-  }
-
-  /**
-   * Build WHERE clause from conditions object
-   * @param {Object} conditions - WHERE conditions
-   * @returns {string} WHERE clause
-   */
-  buildWhereClause(conditions) {
-    const keys = Object.keys(conditions);
-    if (keys.length === 0) return "";
-
-    const clauses = keys.map((key, index) => {
-      const value = conditions[key];
-      if (value === null) {
-        return `${key} IS NULL`;
-      }
-      return `${key} = $${index + 1}`;
-    });
-
-    return `WHERE ${clauses.join(" AND ")}`;
-  }
-
-  /**
-   * Build SET clause from data object
-   * @param {Object} data - Data to update
-   * @returns {string} SET clause
-   */
-  buildSetClause(data) {
-    const keys = Object.keys(data);
-    const clauses = keys.map((key, index) => {
-      const value = data[key];
-      // Handle expressions like 'login_count + 1' or 'CURRENT_TIMESTAMP'
-      if (
-        typeof value === "string" &&
-        (value.includes("+") || value === "CURRENT_TIMESTAMP")
-      ) {
-        return `${key} = ${value}`;
-      }
-      return `${key} = $${index + 1}`;
-    });
-    return clauses.join(", ");
-  }
-
-  /**
-   * Build parameter placeholders
-   * @param {Array} keys - Array of keys
-   * @returns {string} Placeholders string
-   */
-  buildPlaceholders(keys) {
-    return keys.map((_, index) => `$${index + 1}`).join(", ");
-  }
-
-  /**
-   * Build parameters array from conditions
-   * @param {Object} conditions - WHERE conditions
-   * @returns {Array} Parameters array
-   */
-  buildParams(conditions) {
-    return Object.values(conditions).filter((value) => value !== null);
   }
 
   /**
@@ -297,7 +318,7 @@ class BaseDb {
    * @returns {Object} Formatted error response
    */
   formatError(error) {
-    if (error.code === "23505") {
+    if (error.name === "SequelizeUniqueConstraintError") {
       return {
         success: false,
         error: "DUPLICATE_ENTRY",
@@ -305,7 +326,7 @@ class BaseDb {
       };
     }
 
-    if (error.code === "23502") {
+    if (error.name === "SequelizeValidationError") {
       return {
         success: false,
         error: "MISSING_REQUIRED_FIELD",
@@ -313,7 +334,7 @@ class BaseDb {
       };
     }
 
-    if (error.code === "ECONNRESET" || error.code === "ECONNREFUSED") {
+    if (error.name === "SequelizeConnectionError") {
       return {
         success: false,
         error: "DATABASE_CONNECTION_ERROR",

@@ -25,4 +25,27 @@ module.exports = {
     keyPrefix: process.env.REDIS_KEY_PREFIX || "whatsapp:",
     userCacheTTL: process.env.USER_CACHE_TTL || 300, // 5 minutes in seconds
   },
+  whatsapp: {
+    appId: process.env.WHATSAPP_APP_ID,
+    appSecret: process.env.WHATSAPP_APP_SECRET,
+    callbackUrl: process.env.WHATSAPP_CALLBACK_URL,
+    encryptionKey: process.env.WHATSAPP_CREDENTIAL_ENCRYPTION_KEY,
+    graphApiVersion: "v25.0",
+  },
+  xai: {
+    apiKey: process.env.XAI_API_KEY,
+    chatModel: process.env.XAI_CHAT_MODEL || "grok-2-1212",
+    baseURL: process.env.XAI_BASE_URL || "https://api.x.ai/v1",
+  },
+  bullmq: {
+    concurrencyDocument: parseInt(process.env.BULLMQ_CONCURRENCY_DOCUMENT || "1", 10),
+    concurrencyMessage: parseInt(process.env.BULLMQ_CONCURRENCY_MESSAGE || "2", 10),
+  },
+  upload: {
+    maxFileSize: parseInt(process.env.MAX_FILE_SIZE || "52428800", 10),
+    tempPath: process.env.TEMP_UPLOAD_PATH || "./tempUploads",
+  },
+  webhook: {
+    verifyToken: process.env.WEBHOOK_VERIFY_TOKEN || "jawab_ai_webhook_verify_2024",
+  },
 };

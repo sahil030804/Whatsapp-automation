@@ -1,0 +1,715 @@
+{
+  "info": {
+    "name": "JawabAI API",
+    "description": "Complete API collection for JawabAI — WhatsApp Business Automation Platform\n\n## Setup\n1. Import this collection into Postman\n2. Set `base_url` to your server (default: http://localhost:3120)\n3. Start with **Auth > Login** to get a session cookie\n4. All authenticated endpoints use cookies automatically",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3120",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "admin@test.com",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "Test@1234",
+      "type": "string"
+    },
+    {
+      "key": "wa_code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "wa_state",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "wa_account_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "doc_id",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Server health check.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health-check",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health-check"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Welcome to the whatsapp automation tool!\",\n  \"success\": true\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints. Session-based auth using cookies.",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"password\": \"Test@1234\",\n  \"confirmPassword\": \"Test@1234\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"phone\": \"+1234567890\",\n  \"acceptTerms\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"User registered successfully\",\n  \"user\": {\n    \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"email\": \"newuser@example.com\",\n    \"fullName\": \"John Doe\",\n    \"firstName\": \"John\",\n    \"lastName\": \"Doe\",\n    \"phone\": \"+1234567890\",\n    \"avatarUrl\": null,\n    \"isActive\": true,\n    \"role\": \"user\",\n    \"createdAt\": \"2026-05-23T04:00:00.000Z\",\n    \"updatedAt\": \"2026-05-23T04:00:00.000Z\",\n    \"lastLoginAt\": null,\n    \"loginCount\": 0,\n    \"deletedAt\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Login successful\", () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.success).to.be.true;",
+                  "  pm.expect(json.user).to.have.property(\"id\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Login successful\",\n  \"user\": {\n    \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"email\": \"admin@test.com\",\n    \"fullName\": \"System Administrator\",\n    \"firstName\": \"System\",\n    \"lastName\": \"Administrator\",\n    \"phone\": null,\n    \"avatarUrl\": null,\n    \"isActive\": true,\n    \"role\": \"admin\",\n    \"createdAt\": \"2026-05-23T04:00:00.000Z\",\n    \"updatedAt\": \"2026-05-23T04:00:00.000Z\",\n    \"lastLoginAt\": \"2026-05-23T05:00:00.000Z\",\n    \"loginCount\": 5,\n    \"deletedAt\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Logged out successfully\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "profile"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Profile retrieved successfully\",\n  \"user\": {\n    \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"email\": \"admin@test.com\",\n    \"fullName\": \"System Administrator\",\n    \"firstName\": \"System\",\n    \"lastName\": \"Administrator\",\n    \"phone\": null,\n    \"avatarUrl\": null,\n    \"isActive\": true,\n    \"role\": \"admin\",\n    \"createdAt\": \"2026-05-23T04:00:00.000Z\",\n    \"updatedAt\": \"2026-05-23T04:00:00.000Z\",\n    \"lastLoginAt\": \"2026-05-23T05:00:00.000Z\",\n    \"loginCount\": 5,\n    \"deletedAt\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Check Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/check-email/{{email}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "check-email",
+                "{{email}}"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Exists",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Email check completed\",\n  \"email\": \"admin@test.com\",\n  \"exists\": true\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp OAuth",
+      "description": "WhatsApp Business OAuth integration with Meta APIs.",
+      "item": [
+        {
+          "name": "Get OAuth URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Returns OAuth URL\", () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.success).to.be.true;",
+                  "  pm.expect(json.url).to.include(\"facebook.com\");",
+                  "  pm.collectionVariables.set(\"wa_state\", json.state);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/meta/auth-url",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "auth-url"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"url\": \"https://www.facebook.com/v21.0/dialog/oauth?client_id=979664218339142&redirect_uri=https://jawab-ai.buymazing.in%3Fchannel%3Dwhatsapp&state=550e8400-e29b-41d4-a716-446655440000&scope=whatsapp_business_messaging,whatsapp_business_management,business_management\",\n  \"state\": \"550e8400-e29b-41d4-a716-446655440000\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Exchange Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Account connected\", () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.success).to.be.true;",
+                  "  pm.expect(json.account).to.have.property(\"phoneNumberId\");",
+                  "  pm.collectionVariables.set(\"wa_account_id\", json.account.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{wa_code}}\",\n  \"state\": \"{{wa_state}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/meta/exchange-token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "exchange-token"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"account\": {\n    \"id\": 1,\n    \"wabaId\": \"123456789012345\",\n    \"businessId\": \"987654321098765\",\n    \"phoneNumberId\": \"112233445566778\",\n    \"isActive\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/meta/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "accounts"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"accounts\": [\n    {\n      \"id\": 1,\n      \"waba_id\": \"123456789012345\",\n      \"business_id\": \"987654321098765\",\n      \"phone_number_id\": \"112233445566778\",\n      \"webhook_id\": \"wabc123def\",\n      \"is_active\": true,\n      \"token_expires_at\": \"2026-08-21T04:00:00.000Z\",\n      \"created_at\": \"2026-05-23T04:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Disconnect Account",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/meta/accounts/{{wa_account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "accounts",
+                "{{wa_account_id}}"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Account disconnected successfully\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook",
+      "description": "WhatsApp webhook endpoints for receiving message events from Meta.",
+      "item": [
+        {
+          "name": "Verify Challenge",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/meta/webhook?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token=jawab_ai_webhook_verify_2024",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "webhook"
+              ],
+              "query": [
+                {
+                  "key": "hub.mode",
+                  "value": "subscribe"
+                },
+                {
+                  "key": "hub.challenge",
+                  "value": "123456789"
+                },
+                {
+                  "key": "hub.verify_token",
+                  "value": "jawab_ai_webhook_verify_2024"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Verified",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "text/plain"
+                }
+              ],
+              "body": "123456789"
+            }
+          ]
+        },
+        {
+          "name": "Receive Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"123456789012345\",\n      \"changes\": [\n        {\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"15551234567\",\n              \"phone_number_id\": \"112233445566778\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"John Doe\"\n                },\n                \"wa_id\": \"15559876543\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"from\": \"15559876543\",\n                \"id\": \"wamid.ABC123DEF456=\",\n                \"timestamp\": \"1716444000\",\n                \"text\": {\n                  \"body\": \"Hello! What are your business hours?\"\n                },\n                \"type\": \"text\"\n              }\n            ]\n          },\n          \"field\": \"messages\"\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/meta/webhook",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "meta",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Accepted",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Knowledge Base",
+      "description": "Knowledge base document management for RAG-powered AI replies. Upload PDFs, DOCX, or TXT files to train the AI on your business data.",
+      "item": [
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Select PDF, DOCX, TXT, CSV, JSON, or Markdown (max 50MB)"
+                },
+                {
+                  "key": "waAccountId",
+                  "value": "{{wa_account_id}}",
+                  "type": "text",
+                  "description": "Optional: associate with a WhatsApp account"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/knowledge-base/upload",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "knowledge-base",
+                "upload"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Queued",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"document\": {\n    \"id\": 1,\n    \"originalName\": \"business-info.pdf\",\n    \"status\": \"pending\",\n    \"fileSize\": 245760,\n    \"createdAt\": \"2026-05-23T04:00:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/knowledge-base/documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "knowledge-base",
+                "documents"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"documents\": [\n    {\n      \"id\": 1,\n      \"original_name\": \"business-info.pdf\",\n      \"mime_type\": \"application/pdf\",\n      \"file_size\": 245760,\n      \"status\": \"ready\",\n      \"chunk_count\": 42,\n      \"error_message\": null,\n      \"created_at\": \"2026-05-23T04:00:00.000Z\",\n      \"updated_at\": \"2026-05-23T04:05:00.000Z\"\n    },\n    {\n      \"id\": 2,\n      \"original_name\": \"faq.docx\",\n      \"mime_type\": \"application/vnd.openxmlformats-officedocument.wordprocessingml.document\",\n      \"file_size\": 51200,\n      \"status\": \"pending\",\n      \"chunk_count\": 0,\n      \"error_message\": null,\n      \"created_at\": \"2026-05-23T04:10:00.000Z\",\n      \"updated_at\": \"2026-05-23T04:10:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/knowledge-base/documents/{{doc_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "knowledge-base",
+                "documents",
+                "{{doc_id}}"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"document\": {\n    \"id\": 1,\n    \"original_name\": \"business-info.pdf\",\n    \"mime_type\": \"application/pdf\",\n    \"file_size\": 245760,\n    \"status\": \"ready\",\n    \"chunk_count\": 42,\n    \"error_message\": null,\n    \"created_at\": \"2026-05-23T04:00:00.000Z\",\n    \"updated_at\": \"2026-05-23T04:05:00.000Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Document",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/knowledge-base/documents/{{doc_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "knowledge-base",
+                "documents",
+                "{{doc_id}}"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Document deleted successfully\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

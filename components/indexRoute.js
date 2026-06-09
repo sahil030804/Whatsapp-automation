@@ -1,5 +1,8 @@
 const express = require("express");
 const authRoutes = require("./auth/auth.routes");
+const metaRoutes = require("./meta/meta.routes");
+const webhookRoutes = require("./webhook/webhook.routes");
+const knowledgeBaseRoutes = require("./knowledge-base/knowledge-base.routes");
 
 const router = express.Router();
 
@@ -12,5 +15,8 @@ router.get("/health-check", (req, res) => {
 
 // API routes
 router.use("/auth", authRoutes);
+router.use("/meta", metaRoutes);
+router.use("/meta/webhook", webhookRoutes);
+router.use("/knowledge-base", knowledgeBaseRoutes);
 
 module.exports = router;

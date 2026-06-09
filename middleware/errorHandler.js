@@ -1,5 +1,6 @@
 const errorCodes = require("../constants/errorCodes");
 const { ValidationError } = require("./validation");
+const multer = require("multer");
 
 class ErrorHandler {
   validationError(err) {
@@ -30,6 +31,17 @@ class ErrorHandler {
     // Handle validation errors
     if (error instanceof ValidationError) {
       return this.validationError(error);
+    }
+
+    // Handle Multer upload errors
+    if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        return errorCodes.FILE_TOO_LARGE;
+      }
+      return {
+        httpStatusCode: 400,
+        body: { success: false, error: "upload_error", message: error.message },
+      };
     }
 
     // Handle custom error codes thrown with Error("ERROR_NAME")

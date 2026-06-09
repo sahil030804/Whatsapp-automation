@@ -13,6 +13,7 @@ const { createRedisClient } = require("./lib/redis");
 
 const indexRoute = require("./components/indexRoute");
 const errorHandler = require("./middleware/errorHandler");
+const { startWorkers, registerRepeatableJobs, closeAll: closeQueues } = require("./queues");
 
 const PORT = application.port || 3120;
 const IS_PRODUCTION = application.environment === "production";
@@ -27,7 +28,7 @@ function buildRequestLogger() {
     customLogLevel: (_req, res, err) => {
       if (res.statusCode >= 500 || err) return "error";
       if (res.statusCode >= 400) return "warn";
-      return "silent";
+      return "info";
     },
   });
 }
@@ -60,8 +61,11 @@ function createApp(redisClient) {
   // 1. Request logging (first, so every request is captured)
   app.use(buildRequestLogger());
 
-  // 2. Body parsing
-  app.use(express.json({ limit: "10mb" }));
+  // 2. Body parsing — rawBody captured for webhook signature verification
+  app.use(express.json({
+    limit: "10mb",
+    verify: (req, _res, buf) => { req.rawBody = buf.toString(); },
+  }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
   // 3. Session (must come after body parsing, before routes)
@@ -72,6 +76,7 @@ function createApp(redisClient) {
 
   // 5. Global error handler (must be last and have 4 parameters)
   app.use((err, req, res, _next) => {
+    logger.error({ err, method: req.method, url: req.url }, "Unhandled error");
     const errorResponse = errorHandler.getErrorResponse(err, req, null);
     res.status(errorResponse.httpStatusCode || 500).json(errorResponse.body);
   });
@@ -86,9 +91,12 @@ function registerShutdownHandlers(httpServer, redisClient) {
     // Stop accepting new connections
     httpServer.close(async () => {
       try {
-        await redisClient.quit();
+        await Promise.all([
+          redisClient.quit(),
+          closeQueues(),
+        ]);
       } catch (err) {
-        logger.error({ err }, "Error while closing Redis connection");
+        logger.error({ err }, "Error while closing connections");
       }
 
       logger.info("Server shut down successfully");
@@ -117,6 +125,15 @@ async function startServer() {
         "Server is running",
       );
     });
+
+    // Start BullMQ workers
+    try {
+      await startWorkers();
+      await registerRepeatableJobs();
+      logger.info("BullMQ workers initialized");
+    } catch (err) {
+      logger.error({ err }, "Failed to start BullMQ workers");
+    }
 
     registerShutdownHandlers(httpServer, redisClient);
   } catch (err) {

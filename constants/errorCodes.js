@@ -23,6 +23,13 @@ module.exports = {
   },
 
   // Client Errors (400)
+  OAUTH_ERROR: {
+    httpStatusCode: 400,
+    body: {
+      code: "oauth_error",
+      message: "OAuth authentication with Meta failed",
+    },
+  },
   VALIDATION_ERROR: {
     httpStatusCode: 400,
     body: {
@@ -83,6 +90,22 @@ module.exports = {
     body: {
       code: "resource_not_found",
       message: "Requested resource not found",
+    },
+  },
+
+  // Upload Errors (400)
+  UNSUPPORTED_FILE_TYPE: {
+    httpStatusCode: 400,
+    body: {
+      code: "unsupported_file_type",
+      message: "Unsupported file type. Supported types: PDF, DOCX, TXT, CSV, JSON, MD",
+    },
+  },
+  FILE_TOO_LARGE: {
+    httpStatusCode: 413,
+    body: {
+      code: "file_too_large",
+      message: "File exceeds maximum allowed size",
     },
   },
 

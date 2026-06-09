@@ -1,62 +1,22 @@
-const bcrypt = require("bcrypt");
-const baseDb = require("./base");
 const { logger } = require("../lib/logger");
 const { invalidateUserCache } = require("../lib/redis");
+const { User } = require("../models");
 
 class UserDb {
-  constructor() {
-    this.saltRounds = 12;
-  }
-
   /**
    * Create a new user with validation and password hashing
    * @param {Object} userData - User data including email, password, fullName, etc.
    * @returns {Promise<Object>} Creation result
    */
   async createUser(userData) {
-    const { email, password, firstName, lastName, phone } = userData;
-
     try {
-      // Hash password
-      const passwordHash = await bcrypt.hash(password, this.saltRounds);
-
-      const userRecord = {
-        email: email.toLowerCase(),
-        password_hash: passwordHash,
-        full_name: `${firstName} ${lastName}`.trim(),
-        first_name: firstName?.trim() || null,
-        last_name: lastName?.trim() || null,
-        phone: phone?.trim() || null,
-        is_active: true,
-        role: "user",
-      };
-
-      const result = await baseDb.insert("users", userRecord, {
-        returning:
-          "id, email, full_name, first_name, last_name, phone, is_active, role, created_at",
-      });
+      const result = await User.createUser(userData);
 
       if (result.success) {
         logger.info("New user registered successfully", {
-          userId: result.data.id,
-          email: result.data.email,
+          userId: result.user.id,
+          email: result.user.email,
         });
-
-        return {
-          success: true,
-          message: "User registered successfully",
-          user: {
-            id: result.data.id,
-            email: result.data.email,
-            fullName: result.data.full_name,
-            firstName: result.data.first_name,
-            lastName: result.data.last_name,
-            phone: result.data.phone,
-            isActive: result.data.is_active,
-            role: result.data.role,
-            createdAt: result.data.created_at,
-          },
-        };
       }
 
       return result;
@@ -64,18 +24,14 @@ class UserDb {
       logger.error("User creation error:", {
         error: error.message,
         stack: error.stack,
-        email,
+        email: userData.email,
       });
 
-      if (error.message.includes("USER_ALREADY_EXISTS")) {
-        return {
-          success: false,
-          error: "EMAIL_EXISTS",
-          message: "A user with this email address is already registered",
-        };
-      }
-
-      return baseDb.formatError(error);
+      return {
+        success: false,
+        error: "INTERNAL_SERVER_ERROR",
+        message: "An unexpected error occurred during user creation",
+      };
     }
   }
 
@@ -85,18 +41,66 @@ class UserDb {
    * @returns {Promise<Object>} Query result
    */
   async findUserByEmail(email) {
-    return baseDb.findOne(
-      "users",
-      { email: email.toLowerCase(), deleted_at: null },
-      {
-        columns:
-          "id, email, password_hash, full_name, first_name, last_name, phone, is_active, role, login_count, last_login_at",
-      },
-    );
+    try {
+      const user = await User.findByEmail(email);
+
+      if (user) {
+        return {
+          success: true,
+          data: user.get({ plain: true }),
+        };
+      } else {
+        return {
+          success: true,
+          data: null,
+        };
+      }
+    } catch (error) {
+      logger.error("Find user by email error:", {
+        error: error.message,
+        stack: error.stack,
+        email,
+      });
+
+      return this.formatError(error);
+    }
   }
 
+  /**
+   * Find user by custom query
+   * @param {Object} query - Query conditions
+   * @param {string} attributes - Attributes to return
+   * @returns {Promise<Object>} Query result
+   */
   async findOne(query, attributes) {
-    return baseDb.findOne("users", query, { columns: attributes });
+    try {
+      const user = await User.findOne({
+        where: query,
+        attributes: attributes
+          ? attributes.split(",").map((attr) => attr.trim())
+          : undefined,
+      });
+
+      if (user) {
+        return {
+          success: true,
+          data: user.get({ plain: true }),
+        };
+      } else {
+        return {
+          success: true,
+          data: null,
+        };
+      }
+    } catch (error) {
+      logger.error("Find user error:", {
+        error: error.message,
+        stack: error.stack,
+        query,
+      });
+
+      return this.formatError(error);
+    }
   }
 
   /**
@@ -105,14 +109,29 @@ class UserDb {
    * @returns {Promise<Object>} Query result
    */
   async findUserById(userId) {
-    return baseDb.findOne(
-      "users",
-      { id: userId, deleted_at: null },
-      {
-        columns:
-          "id, email, full_name, first_name, last_name, phone, is_active, role, created_at, updated_at, last_login_at",
-      },
-    );
+    try {
+      const user = await User.findById(userId);
+
+      if (user) {
+        return {
+          success: true,
+          data: user.get({ plain: true }),
+        };
+      } else {
+        return {
+          success: true,
+          data: null,
+        };
+      }
+    } catch (error) {
+      logger.error("Find user by ID error:", {
+        error: error.message,
+        stack: error.stack,
+        userId,
+      });
+
+      return this.formatError(error);
+    }
   }
 
   /**
@@ -122,19 +141,24 @@ class UserDb {
    */
   async updateUserLogin(userId) {
     try {
-      const result = await baseDb.update(
-        "users",
-        {
-          login_count: "login_count + 1",
-          last_login_at: "CURRENT_TIMESTAMP",
-        },
-        { id: userId },
-      );
+      const user = await User.findByPk(userId);
 
-      // Invalidate user cache since login data changed
+      if (!user) {
+        return {
+          success: false,
+          error: "USER_NOT_FOUND",
+          message: "User not found",
+        };
+      }
+
+      await user.update({ updatedAt: new Date() });
+
       await invalidateUserCache(userId);
 
-      return result;
+      return {
+        success: true,
+        data: user.get({ plain: true }),
+      };
     } catch (error) {
       logger.error("User login update error:", {
         error: error.message,
@@ -142,7 +166,7 @@ class UserDb {
         userId,
       });
 
-      return baseDb.formatError(error);
+      return this.formatError(error);
     }
   }
 
@@ -152,16 +176,24 @@ class UserDb {
    * @returns {Promise<Object>} Check result
    */
   async checkEmailExists(email) {
-    const result = await baseDb.findOne(
-      "users",
-      { email: email.toLowerCase(), deleted_at: null },
-      { columns: "id" },
-    );
+    try {
+      const exists = await User.checkEmailExists(email);
 
-    return {
-      success: true,
-      exists: result.data !== null,
-    };
+      console.log({ exists });
+
+      return {
+        success: true,
+        exists: exists,
+      };
+    } catch (error) {
+      logger.error("Check email exists error:", {
+        error: error.message,
+        stack: error.stack,
+        email,
+      });
+
+      return this.formatError(error);
+    }
   }
 
   /**
@@ -171,7 +203,16 @@ class UserDb {
    * @returns {Promise<boolean>} Password validity
    */
   async verifyPassword(password, hashedPassword) {
-    return bcrypt.compare(password, hashedPassword);
+    try {
+      const user = await User.build({ password_hash: hashedPassword });
+      return await user.verifyPassword(password);
+    } catch (error) {
+      logger.error("Password verification error:", {
+        error: error.message,
+        stack: error.stack,
+      });
+      return false;
+    }
   }
 
   /**
@@ -180,19 +221,45 @@ class UserDb {
    * @returns {Object} Formatted user data
    */
   formatUserData(user) {
+    const userModel = User.build(user);
+    return userModel.toJSON();
+  }
+
+  /**
+   * Format database errors consistently
+   * @param {Error} error - Database error
+   * @returns {Object} Formatted error response
+   */
+  formatError(error) {
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return {
+        success: false,
+        error: "DUPLICATE_ENTRY",
+        message: "A record with this information already exists",
+      };
+    }
+
+    if (error.name === "SequelizeValidationError") {
+      return {
+        success: false,
+        error: "MISSING_REQUIRED_FIELD",
+        message: "Required information is missing",
+        details: error.errors,
+      };
+    }
+
+    if (error.name === "SequelizeConnectionError") {
+      return {
+        success: false,
+        error: "DATABASE_CONNECTION_ERROR",
+        message: "Database connection error. Please try again later",
+      };
+    }
+
     return {
-      id: user.id,
-      email: user.email,
-      fullName: user.full_name,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      phone: user.phone,
-      isActive: user.is_active,
-      role: user.role,
-      createdAt: user.created_at,
-      updatedAt: user.updated_at,
-      lastLoginAt: user.last_login_at,
-      loginCount: user.login_count,
+      success: false,
+      error: "INTERNAL_SERVER_ERROR",
+      message: "An unexpected database error occurred",
     };
   }
 }
