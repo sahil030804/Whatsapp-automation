@@ -1,8 +1,7 @@
 const { logger } = require("../../lib/logger");
 const documentParser = require("../../services/document-parser.service");
 const embeddingService = require("../../services/embedding.service");
-const { KnowledgeBase } = require("../../models");
-const { sequelize } = require("../../models");
+const { KnowledgeBase, KnowledgeChunk } = require("../../models");
 const fs = require("fs");
 
 module.exports = async (job) => {
@@ -36,29 +35,14 @@ module.exports = async (job) => {
     const chunkRecords = chunks.map((content, i) => ({
       knowledge_base_id: knowledgeBaseId,
       content,
-      embedding: JSON.stringify(embeddings[i]),
-      metadata: JSON.stringify({
+      embedding: embeddings[i],
+      metadata: {
         chunk_index: i,
         char_length: content.length,
-      }),
+      },
     }));
 
-    const batchSize = 50;
-    for (let i = 0; i < chunkRecords.length; i += batchSize) {
-      const batch = chunkRecords.slice(i, i + batchSize);
-
-      const values = batch
-        .map(
-          (r) =>
-            `(${r.knowledge_base_id}, ${sequelize.escape(r.content)}, ${sequelize.escape(r.embedding)}::jsonb, ${sequelize.escape(r.metadata)}::jsonb)`,
-        )
-        .join(",");
-
-      await sequelize.query(
-        `INSERT INTO knowledge_chunks (knowledge_base_id, content, embedding, metadata) VALUES ${values}`,
-      );
-      logger.info({ knowledgeBaseId, batchSize: batch.length }, "Batch inserted");
-    }
+    await KnowledgeChunk.bulkCreate(chunkRecords, { batchSize: 50 });
 
     await KnowledgeBase.update(
       { status: "ready", chunk_count: chunks.length },

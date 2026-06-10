@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes, Sequelize) => {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     knowledge_base_id: { type: DataTypes.INTEGER, allowNull: false },
     content: { type: DataTypes.TEXT, allowNull: false },
+    embedding: { type: DataTypes.JSONB, allowNull: true },
     metadata: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
   }, {
     sequelize,

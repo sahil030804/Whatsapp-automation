@@ -5,6 +5,7 @@ const session = require("express-session");
 const { RedisStore } = require("connect-redis");
 const { pinoHttp } = require("pino-http");
 const { v4: uuidV4 } = require("uuid");
+const cors = require("cors");
 
 const { logger } = require("./lib/logger");
 const { application, redis: redisConfig } = require("./config");
@@ -13,7 +14,11 @@ const { createRedisClient } = require("./lib/redis");
 
 const indexRoute = require("./components/indexRoute");
 const errorHandler = require("./middleware/errorHandler");
-const { startWorkers, registerRepeatableJobs, closeAll: closeQueues } = require("./queues");
+const {
+  startWorkers,
+  registerRepeatableJobs,
+  closeAll: closeQueues,
+} = require("./queues");
 
 const PORT = application.port || 3120;
 const IS_PRODUCTION = application.environment === "production";
@@ -62,10 +67,21 @@ function createApp(redisClient) {
   app.use(buildRequestLogger());
 
   // 2. Body parsing — rawBody captured for webhook signature verification
-  app.use(express.json({
-    limit: "10mb",
-    verify: (req, _res, buf) => { req.rawBody = buf.toString(); },
-  }));
+  app.use(
+    express.json({
+      limit: "10mb",
+      verify: (req, _res, buf) => {
+        req.rawBody = buf.toString();
+      },
+    }),
+  );
+  // CORS — allow frontend origin
+  app.use(
+    cors({
+      origin: process.env.CORS_ORIGIN || "http://localhost:3001",
+      credentials: true,
+    }),
+  );
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
   // 3. Session (must come after body parsing, before routes)
@@ -91,10 +107,7 @@ function registerShutdownHandlers(httpServer, redisClient) {
     // Stop accepting new connections
     httpServer.close(async () => {
       try {
-        await Promise.all([
-          redisClient.quit(),
-          closeQueues(),
-        ]);
+        await Promise.all([redisClient.quit(), closeQueues()]);
       } catch (err) {
         logger.error({ err }, "Error while closing connections");
       }

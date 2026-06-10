@@ -8,7 +8,10 @@
   },
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "db:create": "node scripts/create-db.js",
+    "db:sync": "node scripts/sync-db.js",
+    "db:setup": "npm run db:create && npm run db:sync"
   },
   "repository": {
     "type": "git",
@@ -27,6 +30,7 @@
     "axios": "^1.16.1",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.77.1",
+    "cors": "^2.8.5",
     "connect-redis": "^9.0.0",
     "dotenv-safe": "^9.1.0",
     "express": "^5.2.1",
