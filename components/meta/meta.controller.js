@@ -42,6 +42,32 @@ class MetaController {
     }
   }
 
+  async getEmbeddedSignupConfig(req, res, next) {
+    try {
+      const config = metaService.getEmbeddedSignupConfig();
+      res.status(200).json({ success: true, config });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async embeddedSignup(req, res, next) {
+    try {
+      const userId = req.userId;
+      const { code, wabaId, phoneNumberId } = req.body;
+
+      const result = await metaService.connectViaEmbeddedSignup(userId, {
+        code,
+        wabaId,
+        phoneNumberId,
+      });
+
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getAccounts(req, res, next) {
     try {
       const userId = req.userId;

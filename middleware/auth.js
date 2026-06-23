@@ -17,10 +17,10 @@ module.exports = {
 
       const userId = req.session.userId;
 
-      // First, try to get user data from cache
-      let userData = await getCachedUser(userId);
+      // First, try to get user data from cache. The cache stores the raw DB row.
+      let rawUser = await getCachedUser(userId);
 
-      if (!userData) {
+      if (!rawUser) {
         // Cache miss - fetch from database
         const userResult = await userDb.findUserById(userId);
 
@@ -35,14 +35,15 @@ module.exports = {
           throw new Error("SESSION_EXPIRED");
         }
 
-        userData = userDb.formatUserData(userResult.data);
+        rawUser = userResult.data;
 
-        // Cache the user data for future requests
-        await cacheUser(userId, userResult.data);
+        // Cache the raw user data for future requests
+        await cacheUser(userId, rawUser);
       }
 
-      // Attach user data to request object
-      req.user = userData;
+      // Always format so req.user has the same (camelCase) shape on cache
+      // hit and miss. Otherwise cache hits leak raw DB columns to the client.
+      req.user = userDb.formatUserData(rawUser);
       req.userId = userId;
 
       next();
@@ -81,19 +82,20 @@ module.exports = {
       if (req.session && req.session.userId) {
         const userId = req.session.userId;
 
-        // Try cache first
-        let userData = await getCachedUser(userId);
+        // Try cache first (the cache stores the raw DB row).
+        let rawUser = await getCachedUser(userId);
 
-        if (!userData) {
+        if (!rawUser) {
           const userResult = await userDb.findUserById(userId);
           if (userResult.success && userResult.data) {
-            userData = userDb.formatUserData(userResult.data);
-            await cacheUser(userId, userResult.data);
+            rawUser = userResult.data;
+            await cacheUser(userId, rawUser);
           }
         }
 
-        if (userData) {
-          req.user = userData;
+        if (rawUser) {
+          // Always format for a consistent shape on cache hit and miss.
+          req.user = userDb.formatUserData(rawUser);
           req.userId = userId;
         }
       }

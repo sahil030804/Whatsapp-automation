@@ -32,6 +32,8 @@ const KnowledgeBase = require('./KnowledgeBase')(sequelize, Sequelize.DataTypes,
 const KnowledgeChunk = require('./KnowledgeChunk')(sequelize, Sequelize.DataTypes, Sequelize);
 const Conversation = require('./Conversation')(sequelize, Sequelize.DataTypes, Sequelize);
 const Message = require('./Message')(sequelize, Sequelize.DataTypes, Sequelize);
+const WebhookEvent = require('./WebhookEvent')(sequelize, Sequelize.DataTypes, Sequelize);
+const BusinessProfile = require('./BusinessProfile')(sequelize, Sequelize.DataTypes, Sequelize);
 
 // Create associations
 const models = {
@@ -40,7 +42,9 @@ const models = {
   KnowledgeBase,
   KnowledgeChunk,
   Conversation,
-  Message
+  Message,
+  WebhookEvent,
+  BusinessProfile
 };
 
 // Setup associations

@@ -1,11 +1,17 @@
 const { logger } = require("../../lib/logger");
 const encryptionService = require("../../services/encryption.service");
 const metaGraphService = require("../../services/meta-graph.service");
+const webhookEventService = require("../../services/webhook-event.service");
 const { WhatsAppAccount } = require("../../models");
 
 module.exports = async (job) => {
   if (job.name === "refresh-all-tokens") {
     await refreshAllTokens();
+    return;
+  }
+
+  if (job.name === "cleanup-webhook-events") {
+    await webhookEventService.pruneOlderThan(14);
     return;
   }
 

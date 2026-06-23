@@ -1,4 +1,7 @@
 const { WhatsAppAccount } = require("../../models");
+const businessProfileService = require("./business-profile.service");
+const userProfileService = require("./profile.service");
+const aiTestService = require("./ai-test.service");
 
 class UserController {
   async getPrivileges(req, res, next) {
@@ -21,6 +24,55 @@ class UserController {
           activeWhatsappAccountId: activeAccount?.id || null,
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getBusinessProfile(req, res, next) {
+    try {
+      const result = await businessProfileService.getProfile(req.userId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateBusinessProfile(req, res, next) {
+    try {
+      const result = await businessProfileService.updateProfile(
+        req.userId,
+        req.body,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateProfile(req, res, next) {
+    try {
+      const result = await userProfileService.updateProfile(
+        req.userId,
+        req.body,
+      );
+
+      if (result.success) {
+        return res.status(200).json(result);
+      }
+
+      const status = result.error === "EMAIL_EXISTS" ? 409 : 400;
+      return res.status(status).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async testAI(req, res, next) {
+    try {
+      const { message } = req.body;
+      const result = await aiTestService.testReply(req.userId, message);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

@@ -8,11 +8,13 @@ const {
   WhatsAppAccount,
   Conversation,
   Message,
+  BusinessProfile,
   sequelize,
 } = require("../../models");
 
 module.exports = async (job) => {
-  const { waAccountId, from, messageBody, waMessageId } = job.data;
+  const { waAccountId, from, messageBody, waMessageId, messageTimestamp } =
+    job.data;
 
   logger.info(
     { waAccountId, from, msgSize: messageBody.length },
@@ -38,17 +40,25 @@ module.exports = async (job) => {
     },
   });
 
+  // Use the customer's real message time (Meta sends Unix seconds), not the
+  // processing time, so the 24h service-window check below is meaningful.
+  const inboundAt = messageTimestamp
+    ? new Date(Number(messageTimestamp) * 1000)
+    : new Date();
+
   if (!conversation) {
     conversation = await Conversation.create({
       wa_account_id: waAccountId,
       customer_phone: from,
-      last_message_at: new Date(),
+      last_message_at: inboundAt,
+      last_inbound_at: inboundAt,
     });
     logger.info(
       { conversationId: conversation.id },
       "New conversation created",
     );
   } else {
+    await conversation.update({ last_inbound_at: inboundAt });
     logger.info(
       { conversationId: conversation.id },
       "Existing conversation found",
@@ -65,6 +75,18 @@ module.exports = async (job) => {
     { conversationId: conversation.id, waMessageId },
     "User message stored",
   );
+
+  // Send a read receipt (blue ticks) — best-effort, never blocks the reply.
+  if (waMessageId) {
+    try {
+      await whatsappSender.markAsRead(phoneNumberId, accessToken, waMessageId);
+    } catch (err) {
+      logger.warn(
+        { err: err.message, waMessageId },
+        "Failed to mark message as read",
+      );
+    }
+  }
 
   const history = await Message.findAll({
     where: { conversation_id: conversation.id },
@@ -100,13 +122,35 @@ module.exports = async (job) => {
   const context = ragService.buildContext(similarChunks);
   logger.info({ contextLength: context.length }, "RAG context built");
 
+  const profile = await BusinessProfile.findOne({
+    where: { user_id: account.user_id },
+  });
+
   const reply = await aiChatService.generateReply(
     context,
     messageBody,
     historyMessages.slice(0, -1),
+    profile,
   );
 
   logger.info({ replyLength: reply.content.length }, "AI reply generated");
+
+  // Free-form replies are only allowed inside the 24h service window. An
+  // inbound message keeps it open, so this normally passes; it guards against
+  // delayed processing or future proactive flows that would need a template.
+  if (!whatsappSender.isWithinServiceWindow(conversation.last_inbound_at)) {
+    logger.warn(
+      { conversationId: conversation.id, from },
+      "Outside 24h service window — skipping free-form reply (template required)",
+    );
+    await Message.create({
+      conversation_id: conversation.id,
+      role: "assistant",
+      content: reply.content,
+      metadata: { not_sent: true, reason: "outside_service_window" },
+    });
+    return;
+  }
 
   const sentMessage = await whatsappSender.sendTextMessage(
     phoneNumberId,
@@ -115,8 +159,11 @@ module.exports = async (job) => {
     reply.content,
   );
   logger.info(
-    { waMessageId: sentMessage.messages?.[0]?.id },
-    "Reply sent to WhatsApp",
+    {
+      waMessageId: sentMessage.messages?.[0]?.id,
+      messageStatus: sentMessage.messages?.[0]?.message_status,
+    },
+    "Reply accepted by Graph API",
   );
 
   await Message.create({

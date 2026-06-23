@@ -15,6 +15,20 @@ router.post(
   metaController.exchangeToken,
 );
 
+// Embedded Signup (Coexistence) — one-click onboarding via the FB JS SDK popup.
+router.get(
+  "/embedded-signup/config",
+  isLoggedIn,
+  metaController.getEmbeddedSignupConfig,
+);
+
+router.post(
+  "/embedded-signup",
+  isLoggedIn,
+  validation.validate(metaValidation.embeddedSignupValidation),
+  metaController.embeddedSignup,
+);
+
 router.get("/accounts", isLoggedIn, metaController.getAccounts);
 
 router.delete("/accounts/:id", isLoggedIn, metaController.disconnectAccount);

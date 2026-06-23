@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const metaGraphService = require("../../services/meta-graph.service");
 const encryptionService = require("../../services/encryption.service");
+const { whatsapp } = require("../../config");
 const { WhatsAppAccount } = require("../../models");
 const { logger } = require("../../lib/logger");
 
@@ -11,6 +12,84 @@ class MetaService {
       url: metaGraphService.buildOAuthUrl(state),
       state,
     };
+  }
+
+  /**
+   * Public config the frontend needs to launch the Embedded Signup popup.
+   * None of these values are secret.
+   */
+  getEmbeddedSignupConfig() {
+    return {
+      appId: whatsapp.appId,
+      configId: whatsapp.embeddedSignupConfigId,
+      graphApiVersion: whatsapp.graphApiVersion,
+      featureType: whatsapp.embeddedSignupFeatureType,
+      configured: Boolean(whatsapp.appId && whatsapp.embeddedSignupConfigId),
+    };
+  }
+
+  /**
+   * Upsert a WhatsApp account for a user keyed on (user_id, waba_id), encrypting
+   * the access token. Shared by both the classic OAuth and Embedded Signup flows.
+   */
+  async _upsertAccount(userId, { wabaId, businessId, phoneNumberId, accessToken, expiresIn }) {
+    const encryptedToken = encryptionService.encrypt(accessToken);
+    const expiresAt = new Date(Date.now() + (expiresIn || 5184000) * 1000);
+
+    const existingAccount = await WhatsAppAccount.findOne({
+      where: { user_id: userId, waba_id: wabaId },
+    });
+
+    if (existingAccount) {
+      existingAccount.access_token_encrypted = encryptedToken;
+      existingAccount.token_expires_at = expiresAt;
+      existingAccount.phone_number_id = phoneNumberId;
+      if (businessId) existingAccount.business_id = businessId;
+      existingAccount.is_active = true;
+      await existingAccount.save();
+      return existingAccount;
+    }
+
+    return WhatsAppAccount.create({
+      user_id: userId,
+      waba_id: wabaId,
+      business_id: businessId || null,
+      phone_number_id: phoneNumberId,
+      access_token_encrypted: encryptedToken,
+      token_expires_at: expiresAt,
+      is_active: true,
+    });
+  }
+
+  /**
+   * Subscribe our app to the WABA's webhooks (POST /{waba-id}/subscribed_apps).
+   * Logs the response explicitly so onboarding failures are visible, and is safe
+   * to call repeatedly (Meta treats it idempotently).
+   */
+  async _subscribeApp(account, wabaId, accessToken) {
+    try {
+      const subscriptionResult = await metaGraphService.subscribeToWebhooks(
+        wabaId,
+        accessToken,
+      );
+      logger.info(
+        { wabaId, subscriptionResult },
+        "Subscribed app to WABA webhooks",
+      );
+
+      if (subscriptionResult && subscriptionResult.success) {
+        await account.update({
+          webhook_id: subscriptionResult.id || `sub-${wabaId}`,
+        });
+      }
+      return subscriptionResult;
+    } catch (webhookErr) {
+      logger.warn(
+        { err: webhookErr.message, wabaId },
+        "Webhook subscription failed (may already be subscribed)",
+      );
+      return null;
+    }
   }
 
   async exchangeCode(userId, code) {
@@ -61,53 +140,15 @@ class MetaService {
       const phoneInfo = phoneNumbers[0];
       const phoneNumberId = phoneInfo.id;
 
-      const encryptedToken = encryptionService.encrypt(accessToken);
-
-      const expiresAt = new Date(Date.now() + expiresIn * 1000);
-
-      const existingAccount = await WhatsAppAccount.findOne({
-        where: { user_id: userId, waba_id: wabaId },
+      const account = await this._upsertAccount(userId, {
+        wabaId,
+        businessId,
+        phoneNumberId,
+        accessToken,
+        expiresIn,
       });
 
-      let account;
-      if (existingAccount) {
-        existingAccount.access_token_encrypted = encryptedToken;
-        existingAccount.token_expires_at = expiresAt;
-        existingAccount.phone_number_id = phoneNumberId;
-        existingAccount.business_id = businessId;
-        existingAccount.is_active = true;
-        await existingAccount.save();
-        account = existingAccount;
-      } else {
-        account = await WhatsAppAccount.create({
-          user_id: userId,
-          waba_id: wabaId,
-          business_id: businessId,
-          phone_number_id: phoneNumberId,
-          access_token_encrypted: encryptedToken,
-          token_expires_at: expiresAt,
-          is_active: true,
-        });
-      }
-
-      try {
-        const subscriptionResult = await metaGraphService.subscribeToWebhooks(
-          wabaId,
-          accessToken,
-        );
-        console.log({ subscriptionResult });
-
-        if (subscriptionResult && subscriptionResult.success) {
-          await account.update({
-            webhook_id: subscriptionResult.id || `sub-${wabaId}`,
-          });
-        }
-      } catch (webhookErr) {
-        logger.warn(
-          { err: webhookErr.message, wabaId },
-          "Webhook subscription failed (may already be subscribed)",
-        );
-      }
+      await this._subscribeApp(account, wabaId, accessToken);
 
       return {
         success: true,
@@ -121,6 +162,75 @@ class MetaService {
       };
     } catch (err) {
       logger.error({ err }, "OAuth code exchange failed");
+      throw err;
+    }
+  }
+
+  /**
+   * Connect a number via Meta Embedded Signup (Coexistence). The frontend
+   * captures waba_id + phone_number_id from the WA_EMBEDDED_SIGNUP message and
+   * the auth code from FB.login; here we exchange the code, subscribe the app to
+   * the WABA's webhooks, and persist the account. No /register PIN step is needed
+   * for Coexistence — the owner approved linking from the WhatsApp Business app.
+   */
+  async connectViaEmbeddedSignup(userId, { code, wabaId, phoneNumberId }) {
+    try {
+      const tokenData = await metaGraphService.exchangeEmbeddedSignupCode(code);
+
+      let accessToken = tokenData.access_token;
+      let expiresIn = tokenData.expires_in || 5184000;
+
+      // Embedded Signup tokens are often already long-lived; extend best-effort.
+      try {
+        const longLived = await metaGraphService.extendToken(accessToken);
+        if (longLived?.access_token) {
+          accessToken = longLived.access_token;
+          expiresIn = longLived.expires_in || expiresIn;
+        }
+      } catch (extendErr) {
+        logger.warn(
+          { err: extendErr.message },
+          "Token extension skipped for Embedded Signup token",
+        );
+      }
+
+      let resolvedPhoneNumberId = phoneNumberId;
+      if (!resolvedPhoneNumberId && wabaId) {
+        const phoneNumbers = await metaGraphService.getPhoneNumbers(
+          wabaId,
+          accessToken,
+        );
+        if (phoneNumbers && phoneNumbers.length > 0) {
+          resolvedPhoneNumberId = phoneNumbers[0].id;
+        }
+      }
+
+      if (!wabaId || !resolvedPhoneNumberId) {
+        throw new Error("MISSING_WABA_OR_PHONE");
+      }
+
+      const account = await this._upsertAccount(userId, {
+        wabaId,
+        businessId: null,
+        phoneNumberId: resolvedPhoneNumberId,
+        accessToken,
+        expiresIn,
+      });
+
+      await this._subscribeApp(account, wabaId, accessToken);
+
+      return {
+        success: true,
+        account: {
+          id: account.id,
+          wabaId: account.waba_id,
+          businessId: account.business_id,
+          phoneNumberId: account.phone_number_id,
+          isActive: account.is_active,
+        },
+      };
+    } catch (err) {
+      logger.error({ err }, "Embedded Signup connection failed");
       throw err;
     }
   }

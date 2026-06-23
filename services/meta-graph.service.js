@@ -62,6 +62,34 @@ class MetaGraphService {
     }
   }
 
+  /**
+   * Exchange an Embedded Signup authorization code for a business token.
+   * Unlike the classic OAuth redirect flow, Embedded Signup uses
+   * response_type=code WITHOUT a redirect_uri, so it must NOT be sent here.
+   */
+  async exchangeEmbeddedSignupCode(code) {
+    logger.info("Exchanging Embedded Signup code for token");
+    try {
+      const { data } = await axios.get(`${this.baseURL}/oauth/access_token`, {
+        params: {
+          client_id: this.appId,
+          client_secret: this.appSecret,
+          code,
+        },
+      });
+      return data;
+    } catch (err) {
+      if (err.response?.data?.error?.message) {
+        logger.error(
+          { fbError: err.response.data.error },
+          "Embedded Signup token exchange error",
+        );
+        throw new Error("OAUTH_ERROR");
+      }
+      throw err;
+    }
+  }
+
   async extendToken(accessToken) {
     const { data } = await axios.get(`${this.baseURL}/oauth/access_token`, {
       params: {

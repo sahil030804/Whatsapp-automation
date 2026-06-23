@@ -170,6 +170,22 @@ async function registerRepeatableJobs() {
     );
     logger.info("Registered repeatable job: refresh-all-tokens");
   }
+
+  const cleanupExists = repeatableJobs.some(
+    (j) => j.name === "cleanup-webhook-events",
+  );
+
+  if (!cleanupExists) {
+    await tokenQueue.add(
+      "cleanup-webhook-events",
+      {},
+      {
+        repeat: { pattern: "30 3 * * *" }, // daily at 03:30
+        jobId: "cleanup-webhook-events",
+      },
+    );
+    logger.info("Registered repeatable job: cleanup-webhook-events");
+  }
 }
 
 async function closeAll() {

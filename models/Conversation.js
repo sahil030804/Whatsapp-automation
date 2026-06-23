@@ -12,6 +12,8 @@ module.exports = (sequelize, DataTypes, Sequelize) => {
     customer_phone: { type: DataTypes.STRING(20), allowNull: false },
     customer_name: { type: DataTypes.STRING(255), allowNull: true },
     last_message_at: { type: DataTypes.DATE, allowNull: true },
+    // When the customer last messaged us — drives the 24h service window.
+    last_inbound_at: { type: DataTypes.DATE, allowNull: true },
     unread_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     metadata: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
   }, {

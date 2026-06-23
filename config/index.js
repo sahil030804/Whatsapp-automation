@@ -31,6 +31,13 @@ module.exports = {
     callbackUrl: process.env.WHATSAPP_CALLBACK_URL,
     encryptionKey: process.env.WHATSAPP_CREDENTIAL_ENCRYPTION_KEY,
     graphApiVersion: "v25.0",
+    // Embedded Signup configuration id (created in Meta App Dashboard).
+    // Required for the one-click Coexistence onboarding flow.
+    embeddedSignupConfigId: process.env.WHATSAPP_ES_CONFIG_ID || "",
+    // "whatsapp_business_app_onboarding" enables Coexistence (owner keeps the
+    // WhatsApp Business mobile app); leave default unless doing full migration.
+    embeddedSignupFeatureType:
+      process.env.WHATSAPP_ES_FEATURE_TYPE || "whatsapp_business_app_onboarding",
   },
   xai: {
     apiKey: process.env.XAI_API_KEY,
