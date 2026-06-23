@@ -24,10 +24,11 @@ class DocumentParserService {
   }
 
   async _parsePDF(filePath) {
-    const pdfParse = require("pdf-parse");
+    const { PDFParse } = require("pdf-parse");
     const buffer = fs.readFileSync(filePath);
-    const data = await pdfParse(buffer);
-    return data.text;
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    return result.text;
   }
 
   async _parseDOCX(filePath) {

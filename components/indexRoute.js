@@ -3,6 +3,7 @@ const authRoutes = require("./auth/auth.routes");
 const metaRoutes = require("./meta/meta.routes");
 const webhookRoutes = require("./webhook/webhook.routes");
 const knowledgeBaseRoutes = require("./knowledge-base/knowledge-base.routes");
+const userRoutes = require("./user/user.routes");
 
 const router = express.Router();
 
@@ -18,5 +19,6 @@ router.use("/auth", authRoutes);
 router.use("/meta", metaRoutes);
 router.use("/meta/webhook", webhookRoutes);
 router.use("/knowledge-base", knowledgeBaseRoutes);
+router.use("/user", userRoutes);
 
 module.exports = router;
