@@ -129,6 +129,16 @@ module.exports = (sequelize, DataTypes, Sequelize) => {
         allowNull: false,
         defaultValue: false,
       },
+      ai_replies_used: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      ai_replies_limit: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 20,
+      },
     },
     {
       sequelize,

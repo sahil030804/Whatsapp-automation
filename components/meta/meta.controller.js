@@ -88,6 +88,18 @@ class MetaController {
       next(err);
     }
   }
+
+  async toggleAutoReply(req, res, next) {
+    try {
+      const userId = req.userId;
+      const { id } = req.params;
+      const { enabled } = req.body;
+      const result = await metaService.toggleAutoReply(userId, id, enabled);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = new MetaController();

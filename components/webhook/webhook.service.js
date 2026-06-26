@@ -213,6 +213,18 @@ class WebhookService {
       return;
     }
 
+    if (!account.auto_reply_enabled) {
+      logger.info(
+        { waAccountId: account.id, from: msgFrom, waMessageId: msgId },
+        "Auto-reply disabled — message skipped",
+      );
+      await webhookEventService.record({
+        ...base,
+        processingStatus: "auto_reply_disabled",
+      });
+      return;
+    }
+
     logger.info(
       {
         waAccountId: account.id,

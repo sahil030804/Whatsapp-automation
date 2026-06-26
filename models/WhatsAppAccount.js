@@ -13,10 +13,12 @@ module.exports = (sequelize, DataTypes, Sequelize) => {
     waba_id: { type: DataTypes.STRING(255), allowNull: true },
     business_id: { type: DataTypes.STRING(255), allowNull: true },
     phone_number_id: { type: DataTypes.STRING(255), allowNull: true },
+    display_phone_number: { type: DataTypes.STRING(30), allowNull: true },
     access_token_encrypted: { type: DataTypes.TEXT, allowNull: true },
     token_expires_at: { type: DataTypes.DATE, allowNull: true },
     webhook_id: { type: DataTypes.STRING(255), allowNull: true },
     is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    auto_reply_enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   }, {
     sequelize,
     modelName: "WhatsAppAccount",

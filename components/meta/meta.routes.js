@@ -33,4 +33,6 @@ router.get("/accounts", isLoggedIn, metaController.getAccounts);
 
 router.delete("/accounts/:id", isLoggedIn, metaController.disconnectAccount);
 
+router.patch("/accounts/:id/auto-reply", isLoggedIn, metaController.toggleAutoReply);
+
 module.exports = router;

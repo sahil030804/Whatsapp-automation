@@ -32,7 +32,7 @@ class MetaService {
    * Upsert a WhatsApp account for a user keyed on (user_id, waba_id), encrypting
    * the access token. Shared by both the classic OAuth and Embedded Signup flows.
    */
-  async _upsertAccount(userId, { wabaId, businessId, phoneNumberId, accessToken, expiresIn }) {
+  async _upsertAccount(userId, { wabaId, businessId, phoneNumberId, displayPhoneNumber, accessToken, expiresIn }) {
     const encryptedToken = encryptionService.encrypt(accessToken);
     const expiresAt = new Date(Date.now() + (expiresIn || 5184000) * 1000);
 
@@ -44,6 +44,7 @@ class MetaService {
       existingAccount.access_token_encrypted = encryptedToken;
       existingAccount.token_expires_at = expiresAt;
       existingAccount.phone_number_id = phoneNumberId;
+      if (displayPhoneNumber) existingAccount.display_phone_number = displayPhoneNumber;
       if (businessId) existingAccount.business_id = businessId;
       existingAccount.is_active = true;
       await existingAccount.save();
@@ -55,6 +56,7 @@ class MetaService {
       waba_id: wabaId,
       business_id: businessId || null,
       phone_number_id: phoneNumberId,
+      display_phone_number: displayPhoneNumber || null,
       access_token_encrypted: encryptedToken,
       token_expires_at: expiresAt,
       is_active: true,
@@ -139,11 +141,13 @@ class MetaService {
 
       const phoneInfo = phoneNumbers[0];
       const phoneNumberId = phoneInfo.id;
+      const displayPhoneNumber = phoneInfo.display_phone_number;
 
       const account = await this._upsertAccount(userId, {
         wabaId,
         businessId,
         phoneNumberId,
+        displayPhoneNumber,
         accessToken,
         expiresIn,
       });
@@ -157,6 +161,7 @@ class MetaService {
           wabaId: account.waba_id,
           businessId: account.business_id,
           phoneNumberId: account.phone_number_id,
+          displayPhoneNumber: account.display_phone_number,
           isActive: account.is_active,
         },
       };
@@ -195,6 +200,7 @@ class MetaService {
       }
 
       let resolvedPhoneNumberId = phoneNumberId;
+      let resolvedDisplayPhoneNumber = null;
       if (!resolvedPhoneNumberId && wabaId) {
         const phoneNumbers = await metaGraphService.getPhoneNumbers(
           wabaId,
@@ -202,6 +208,7 @@ class MetaService {
         );
         if (phoneNumbers && phoneNumbers.length > 0) {
           resolvedPhoneNumberId = phoneNumbers[0].id;
+          resolvedDisplayPhoneNumber = phoneNumbers[0].display_phone_number;
         }
       }
 
@@ -213,6 +220,7 @@ class MetaService {
         wabaId,
         businessId: null,
         phoneNumberId: resolvedPhoneNumberId,
+        displayPhoneNumber: resolvedDisplayPhoneNumber,
         accessToken,
         expiresIn,
       });
@@ -226,6 +234,7 @@ class MetaService {
           wabaId: account.waba_id,
           businessId: account.business_id,
           phoneNumberId: account.phone_number_id,
+          displayPhoneNumber: account.display_phone_number,
           isActive: account.is_active,
         },
       };
@@ -243,8 +252,10 @@ class MetaService {
         "waba_id",
         "business_id",
         "phone_number_id",
+        "display_phone_number",
         "webhook_id",
         "is_active",
+        "auto_reply_enabled",
         "token_expires_at",
         "created_at",
       ],
@@ -252,6 +263,28 @@ class MetaService {
     });
 
     return { success: true, accounts };
+  }
+
+  async toggleAutoReply(userId, accountId, enabled) {
+    const account = await WhatsAppAccount.findOne({
+      where: { id: accountId, user_id: userId },
+    });
+
+    if (!account) {
+      throw new Error("RESOURCE_NOT_FOUND");
+    }
+
+    await account.update({ auto_reply_enabled: enabled });
+
+    logger.info(
+      { accountId, enabled, phoneNumberId: account.phone_number_id },
+      `Auto-reply ${enabled ? "enabled" : "disabled"}`,
+    );
+
+    return {
+      success: true,
+      auto_reply_enabled: enabled,
+    };
   }
 
   async disconnectAccount(userId, accountId) {

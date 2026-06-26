@@ -8,6 +8,8 @@ const router = express.Router();
 
 router.get("/privileges", isLoggedIn, userController.getPrivileges);
 
+router.get("/usage", isLoggedIn, userController.getUsage);
+
 router.get("/business-profile", isLoggedIn, userController.getBusinessProfile);
 
 router.patch(

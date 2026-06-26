@@ -1,4 +1,4 @@
-const { WhatsAppAccount } = require("../../models");
+const { User, WhatsAppAccount, KnowledgeBase } = require("../../models");
 const businessProfileService = require("./business-profile.service");
 const userProfileService = require("./profile.service");
 const aiTestService = require("./ai-test.service");
@@ -73,6 +73,32 @@ class UserController {
       const { message } = req.body;
       const result = await aiTestService.testReply(req.userId, message);
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getUsage(req, res, next) {
+    try {
+      const userId = req.userId;
+
+      const user = await User.findByPk(userId, {
+        attributes: ["ai_replies_used", "ai_replies_limit"],
+      });
+
+      const documentCount = await KnowledgeBase.count({
+        where: { user_id: userId },
+      });
+
+      res.status(200).json({
+        success: true,
+        usage: {
+          aiRepliesUsed: user.ai_replies_used,
+          aiRepliesLimit: user.ai_replies_limit,
+          documentsUploaded: documentCount,
+          documentsLimit: 2,
+        },
+      });
     } catch (error) {
       next(error);
     }

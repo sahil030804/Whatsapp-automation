@@ -5,6 +5,7 @@ const ragService = require("../../services/rag.service");
 const aiChatService = require("../../services/ai-chat.service");
 const whatsappSender = require("../../services/whatsapp-sender.service");
 const {
+  User,
   WhatsAppAccount,
   Conversation,
   Message,
@@ -24,6 +25,10 @@ module.exports = async (job) => {
   const account = await WhatsAppAccount.findByPk(waAccountId);
   if (!account || !account.is_active) {
     throw new Error(`WhatsApp account ${waAccountId} not found or inactive`);
+  }
+  if (!account.auto_reply_enabled) {
+    logger.info({ waAccountId, from }, "Auto-reply disabled — skipping reply");
+    return;
   }
   logger.info(
     { waAccountId, phoneNumberId: account.phone_number_id },
@@ -122,6 +127,18 @@ module.exports = async (job) => {
   const context = ragService.buildContext(similarChunks);
   logger.info({ contextLength: context.length }, "RAG context built");
 
+  const user = await User.findByPk(account.user_id, {
+    attributes: ["ai_replies_used", "ai_replies_limit"],
+  });
+
+  if (user && user.ai_replies_used >= user.ai_replies_limit) {
+    logger.warn(
+      { userId: account.user_id, used: user.ai_replies_used, limit: user.ai_replies_limit },
+      "AI reply limit reached — skipping reply",
+    );
+    return;
+  }
+
   const profile = await BusinessProfile.findOne({
     where: { user_id: account.user_id },
   });
@@ -178,8 +195,13 @@ module.exports = async (job) => {
     unread_count: 0,
   });
 
+  await User.increment('ai_replies_used', {
+    by: 1,
+    where: { id: account.user_id },
+  });
+
   logger.info(
     { waAccountId, from, waMessageId },
-    "Message processed and reply sent",
+    'Message processed and reply sent',
   );
 };
